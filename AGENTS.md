@@ -17,9 +17,9 @@
   changes.
 - `python -m pip install -r python_service/requirements.txt` prepares the LLM
   bridge environment inside your active virtualenv.
-- `npm start` serves the app on `http://localhost:3000` using the production
+- `npm start` serves the app on `http://localhost:3000` using the produ
   Express entrypoint.
-- `uvicorn python_service.main:app --reload --factory` starts the Gemini bridge
+- `uvicorn python_service.main:app --reload` starts the Gemini bridge
   on `http://localhost:8000`; export `GEMINI_API_KEY` when wiring the real
   model.
 - `npx nodemon server.js` hot-reloads backend updates; watch the terminal for

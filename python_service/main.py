@@ -38,7 +38,7 @@ def build_app() -> FastAPI:
     )
 
     little_terminal = LittleTerminal(
-        model=os.getenv("GEMINI_MODEL", "gemini-pro"),
+        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
     )
 
     @api.post("/llm/respond", response_model=ChatResponse)
