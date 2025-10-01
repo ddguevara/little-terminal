@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from .gemini_client import GeminiClient
+from .little_terminal import LittleTerminal
 from .state import SessionState, store
 
 
@@ -37,15 +37,14 @@ def build_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    gemini_client = GeminiClient(
-        api_key=os.getenv("GEMINI_API_KEY"),
+    little_terminal = LittleTerminal(
         model=os.getenv("GEMINI_MODEL", "gemini-pro"),
     )
 
     @api.post("/llm/respond", response_model=ChatResponse)
     async def respond(payload: ChatRequest) -> ChatResponse:
         session: SessionState = store.get_or_create(payload.session_id)
-        reply = await gemini_client.generate(prompt=payload.message, session=session)
+        reply = await little_terminal.generate(user_message=payload.message, session=session)
         store.save(session)
         return ChatResponse(
             session_id=session.id,
