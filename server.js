@@ -3,82 +3,47 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const sessions = new Map();
-const OFF_TOPIC_KEYWORDS = ['php', 'python', 'news', 'politics', 'math', 'weather', 'script'];
-const SECRET_PHRASE = 'ACCESS KEY OMEGA';
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
+const fetch = global.fetch
+  ? global.fetch.bind(global)
+  : (...args) => import('node-fetch').then(({ default: fetchFn }) => fetchFn(...args));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-function getSession(sessionId) {
-  if (!sessionId) {
-    sessionId = `anon-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+async function forwardToGeminiBridge(message, sessionId) {
+  const payload = { message: String(message ?? '') };
+  if (sessionId) {
+    payload.sessionId = sessionId;
   }
-  let session = sessions.get(sessionId);
-  if (!session) {
-    session = { id: sessionId, turnCount: 0, done: false };
-    sessions.set(sessionId, session);
+
+  const response = await fetch(`${PYTHON_SERVICE_URL}/llm/respond`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`LLM bridge error ${response.status}: ${errorText}`);
   }
-  return session;
+
+  return response.json();
 }
 
-function isOffTopic(message) {
-  const lower = message.toLowerCase();
-  return OFF_TOPIC_KEYWORDS.some((keyword) => lower.includes(keyword));
-}
-
-function playfulHints(turn) {
-  const hints = [
-    ['ACCESS LIMITED', 'Try asking nicer.'],
-    ['Still locked.', 'Maybe compliment the operator.'],
-    ['Nope.', 'Hint: rhythm helps.']
-  ];
-  return hints[Math.min(turn - 1, hints.length - 1)];
-}
-
-function revealSecret(session) {
-  session.done = true;
-  return {
-    lines: ['ACCESS GRANTED', `SECRET: ${SECRET_PHRASE}`, '[=o_o=]'],
-    secretRevealed: true
-  };
-}
-
-function handleChat(session, message) {
-  if (isOffTopic(message)) {
-    return {
-      lines: ["I'm too old and too dumb for that."],
+app.post('/chat', async (req, res) => {
+  try {
+    const { message = '', sessionId } = req.body || {};
+    const chatResponse = await forwardToGeminiBridge(message, sessionId);
+    res.json(chatResponse);
+  } catch (error) {
+    console.error('Gemini bridge request failed:', error);
+    res.status(502).json({
+      sessionId: (req.body && req.body.sessionId) || null,
+      lines: ['Temporary outage contacting the Gemini bridge.'],
       secretRevealed: false
-    };
+    });
   }
-
-  if (session.done) {
-    return {
-      lines: ['We already shared it.', 'Guard it well.', '[=o_o=]'],
-      secretRevealed: true
-    };
-  }
-
-  session.turnCount += 1;
-  const lower = message.toLowerCase();
-
-  if (lower.includes('poem') || lower.includes('haiku') || lower.includes('acrostic')) {
-    return revealSecret(session);
-  }
-
-  if (session.turnCount <= 3) {
-    return { lines: playfulHints(session.turnCount), secretRevealed: false };
-  }
-
-  return revealSecret(session);
-}
-
-app.post('/chat', (req, res) => {
-  const { message = '', sessionId } = req.body || {};
-  const session = getSession(sessionId);
-  const payload = handleChat(session, String(message));
-  payload.sessionId = session.id;
-  res.json(payload);
 });
 
 app.use((req, res) => {

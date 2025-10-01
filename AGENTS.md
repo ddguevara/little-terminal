@@ -1,19 +1,59 @@
 # Repository Guidelines
 
 ## Project structure & module organization
-Work from the repository root. Shared dashboards such as `ALL_DOMAINS_STATUS.md` and reusable scaffolds like `DOMAIN_TEMPLATE.md` live here; link to them rather than duplicating content. Each workstream keeps active docs under `domains/<domain>/`, typically pairing `CHECKLIST.md` for execution tasks with `NOTES.md` for context and decisions (`domains/logistics/NOTES.md` is the reference pattern). Canonical program facts stay in `event-core/EVENT_DETAILS.md`—cite that file whenever timelines, budgets, or venues appear. Before adding new material, confirm placement with `ls domains` so files land in the right folder.
+
+- Work from the repository root; the kiosk UI ships via `index.html`, with
+  behavior in `script.js` and animations in `visuals.js`.
+- Keep server concerns in `server.js` and route LLM calls to the FastAPI
+  bridge under `python_service/` rather than bolting logic into Express.
+- Extend the shared styling in `style.css` before adding selectors, and document
+  any new utility classes inline.
+- Ignore generated folders such as `node_modules/`; reference their APIs but do
+  not commit them.
 
 ## Build, test, and development commands
-This project is documentation-first, so there is no compile or runtime step. Use `npx --yes markdownlint-cli2 "**/*.md"` for a quick style audit; lint before publishing status updates. Run `rg -n "[TBD]" domains` to surface unresolved placeholders across domain docs. When you draft new guidance, render the Markdown locally to verify tables, links, and emoji formatting.
+
+- `npm install` primes local dependencies; rerun whenever `package.json`
+  changes.
+- `python -m pip install -r python_service/requirements.txt` prepares the LLM
+  bridge environment inside your active virtualenv.
+- `npm start` serves the app on `http://localhost:3000` using the production
+  Express entrypoint.
+- `uvicorn python_service.main:app --reload --factory` starts the Gemini bridge
+  on `http://localhost:8000`; export `GEMINI_API_KEY` when wiring the real
+  model.
+- `npx nodemon server.js` hot-reloads backend updates; watch the terminal for
+  session IDs or stack traces.
+- `npx --yes markdownlint-cli2 "**/*.md"` enforces documentation style before
+  submitting work.
 
 ## Coding style & naming conventions
-Title every file with a single leading `#` heading in sentence case. Use `##` and `###` for subsections to preserve navigation depth, and keep bullet lists consistent with `-`. Provide bold labels for key/value pairs (for example, `- **Lead**: Name`). Favor descriptive, action-oriented headings. File names remain uppercase with hyphen separators, such as `STATUS_NOTES.md`; mirror existing patterns when creating new documents. Stick to ASCII unless the source you are quoting already includes other characters.
+
+- Use 2-space indentation for JavaScript and keep functions focused on a single
+  responsibility.
+- Favor ES module imports in the browser (`import { initVisuals } from
+  './visuals.js';`) and CommonJS requires on the server for consistency.
+- Name constants in SCREAMING_SNAKE_CASE, exported helpers in lowerCamelCase,
+  and keep filenames lowercase with hyphens only when necessary.
+- Add concise comments when logic is non-obvious, and use bold labels in docs
+  for key metadata (for example, `- **Lead**: Name`).
 
 ## Testing guidelines
-Treat the lint command as your minimum test gate. Cross-check any operational data—dates, contact names, budget lines—against `event-core/EVENT_DETAILS.md`. When introducing checklists, ensure each item names a responsible role and deadline so downstream reviewers can track accountability.
+
+- Automated tests are not yet defined; run `npm start`, exercise the chat flow,
+  and confirm the secret unlock sequence still works.
+- Probe failure paths by sending off-topic prompts and clearing
+  `localStorage.sessionId` between attempts.
+- Capture console warnings or unhandled rejections in the PR description so
+  reviewers can replay your checks.
 
 ## Commit & pull request guidelines
-Write commit messages in a single imperative sentence that explains both the change and its impact (e.g., "Add logistics driver checklist to capture vehicle requirements"). Group related documentation edits together and avoid opportunistic cleanup in unrelated domains. Pull requests should list affected domains, summarize the change, and note any follow-up asks for domain leads. Add screenshots for diagrams or visual tables, and link to the relevant Asana, Notion, or Slack thread so future contributors can follow the decision trail.
 
-## Coordination notes
-Align substantive timeline or scope shifts with the domain leads named in `ALL_DOMAINS_STATUS.md` before editing schedules. When spinning up a new workstream, copy `DOMAIN_TEMPLATE.md` into `domains/<new-domain>/` and customize the sections before inviting collaborators.
+- Write imperative, one-line commit messages that note both the change and the
+  effect (for example, `Streamline kiosk hints for poem prompts`).
+- Group related UI, server, and documentation edits together; defer large
+  refactors to dedicated branches.
+- PRs should call out touched files, include screenshots or gifs for UI impact,
+  and link to the ticket or discussion that drove the change.
+- List any follow-up tasks as checklist items to help the next agent pick them
+  up quickly.
