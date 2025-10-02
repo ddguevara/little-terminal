@@ -31,6 +31,8 @@ out/
 .parcel-cache/
 .turbo/
 .eslintcache
+__pycache__/
+*.py[cod]
 
 # Environment variables
 .env
@@ -51,5 +53,4 @@ out/
 
 # Archives
 *.tgz
-
 
