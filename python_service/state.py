@@ -23,6 +23,8 @@ class SessionState:
         timestamp = datetime.now().isoformat()
         self.history.append({"role": role, "content": content, "timestamp": timestamp})
         self.last_timestamp = timestamp
+        if role == "user":
+            self.turn_count += 1
 
     def is_expired(self, timeout_minutes: int = 5) -> bool:
         """Check if session has expired based on last message timestamp."""
@@ -36,7 +38,11 @@ class SessionState:
         if not self.history:
             return "No previous messages in this session."
 
-        history_text = f"Session message count: {len(self.history)}\n\nConversation history:\n"
+        user_message_count = sum(1 for msg in self.history if msg["role"] == "user")
+        # keep stored count aligned with actual user turns
+        self.turn_count = user_message_count
+
+        history_text = f"Session message count: {user_message_count}\n\nConversation history:\n"
         for msg in self.history:
             role = msg["role"]
             content = msg["content"]

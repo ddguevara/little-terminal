@@ -18,6 +18,7 @@ let drops = [];
 let fontSize = 20;
 let columnCount = 0;
 let horizontalDrift = [];
+let lastFrameTime = 0;
 
 function initCanvas() {
   canvas = document.getElementById('matrix');
@@ -52,7 +53,20 @@ function resizeCanvas() {
   horizontalDrift = new Array(columnCount).fill(0);
 }
 
-function drawMatrix() {
+function drawMatrix(timestamp) {
+  if (!canvas) {
+    return;
+  }
+  if (!lastFrameTime) {
+    lastFrameTime = timestamp;
+  }
+  const delta = timestamp - lastFrameTime;
+  if (delta < 55) {
+    animationFrameId = requestAnimationFrame(drawMatrix);
+    return;
+  }
+  lastFrameTime = timestamp;
+
   const height = canvas.height / (window.devicePixelRatio || 1);
   const width = canvas.width / (window.devicePixelRatio || 1);
   ctx.fillStyle = 'rgba(0, 12, 0, 0.22)';
@@ -78,15 +92,14 @@ function drawMatrix() {
     }
   }
 
-  animationFrameId = requestAnimationFrame(() => {
-    setTimeout(drawMatrix, 55);
-  });
+  animationFrameId = requestAnimationFrame(drawMatrix);
 }
 
 function startMatrix() {
   if (animationFrameId) {
     return;
   }
+  lastFrameTime = 0;
   animationFrameId = requestAnimationFrame(drawMatrix);
 }
 
@@ -96,6 +109,7 @@ function stopMatrix() {
   }
   cancelAnimationFrame(animationFrameId);
   animationFrameId = null;
+  lastFrameTime = 0;
 }
 
 function applyMoodClass() {

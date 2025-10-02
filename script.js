@@ -34,6 +34,7 @@ let sessionId = initSessionId();
 let glitchTimer = null;
 let audioCtx;
 let currentMood = 'boot';
+let promptPlaceholderActive = false;
 
 initVisuals();
 updateMood('boot');
@@ -165,6 +166,19 @@ function typeLines(lines) {
 function clearScreen() {
   screen.innerHTML = '';
   cursorEl = null;
+  promptPlaceholderActive = false;
+}
+
+function removePromptPlaceholder() {
+  if (!promptPlaceholderActive) {
+    return;
+  }
+  const lastLine = screen.lastElementChild;
+  if (lastLine?.classList.contains('line')) {
+    lastLine.remove();
+  }
+  cursorEl = null;
+  promptPlaceholderActive = false;
 }
 
 function resetIdleTimer() {
@@ -263,9 +277,12 @@ async function processInput() {
   playKeyBeep();
   input.value = '';
   resetIdleTimer();
+  removePromptPlaceholder();
   await typeLine(`> ${value}`);
   updateMood('processing');
   await handleCommand(value);
+  await typeLine('');
+  promptPlaceholderActive = true;
 }
 
 function handleKeydown(event) {

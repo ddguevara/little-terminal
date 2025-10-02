@@ -45,7 +45,6 @@ def build_app() -> FastAPI:
     async def respond(payload: ChatRequest) -> ChatResponse:
         session: SessionState = store.get_or_create(payload.session_id)
         reply = await little_terminal.generate(user_message=payload.message, session=session)
-        store.save(session)
         return ChatResponse(
             session_id=session.id,
             lines=reply.lines,

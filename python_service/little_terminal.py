@@ -75,21 +75,41 @@ class LittleTerminal:
         # Agent will be created with dynamic prompt on each call
 
     def _load_api_key(self) -> None:
-        """Load API key from env_vars file and set as environment variable."""
-        env_vars_path = Path(__file__).parent.parent / "env_vars"
-        if not env_vars_path.exists():
-            raise FileNotFoundError(f"env_vars file not found at {env_vars_path}")
+        """Load API key from environment or local config files."""
+        if os.getenv("GEMINI_API_KEY"):
+            return
 
-        with open(env_vars_path) as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("GOOGLE_API_KEY="):
-                    key = line.split("=", 1)[1].strip('"')
-                    # Set as environment variable for Pydantic AI (expects GEMINI_API_KEY)
-                    os.environ["GEMINI_API_KEY"] = key
-                    return
+        if self._load_key_from_file(Path(__file__).parent.parent / ".env", "GEMINI_API_KEY"):
+            return
 
-        raise ValueError("GOOGLE_API_KEY not found in env_vars file")
+        if self._load_key_from_file(Path(__file__).parent.parent / "env_vars", "GOOGLE_API_KEY"):
+            return
+
+        print(
+            "[little-terminal] GEMINI_API_KEY is not set; LLM requests will fail until a key is provided",
+            flush=True,
+        )
+
+    @staticmethod
+    def _load_key_from_file(path: Path, target_key: str) -> bool:
+        if not path.exists():
+            return False
+
+        try:
+            with open(path) as file:
+                for raw_line in file:
+                    line = raw_line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' not in line:
+                        continue
+                    key, value = line.split('=', 1)
+                    if key.strip() == target_key:
+                        os.environ["GEMINI_API_KEY"] = value.strip().strip('"').strip("'")
+                        return True
+        except OSError:
+            pass
+        return False
 
     async def generate(self, *, user_message: str, session: SessionState) -> LittleTerminalReply:
         """Return chat lines from the LLM agent. Automatically saves session state."""

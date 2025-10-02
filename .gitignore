@@ -54,3 +54,4 @@ __pycache__/
 # Archives
 *.tgz
 
+python_service/session_data.json
