@@ -18,6 +18,7 @@ class SessionState:
     done: bool = False
     history: List[Dict[str, str]] = field(default_factory=list)
     last_timestamp: Optional[str] = None
+    anxiety_level: int = 12
 
     def record_turn(self, role: str, content: str) -> None:
         timestamp = datetime.now().isoformat()
@@ -25,6 +26,10 @@ class SessionState:
         self.last_timestamp = timestamp
         if role == "user":
             self.turn_count += 1
+
+    def clamp_anxiety(self, value: int) -> int:
+        self.anxiety_level = max(0, min(100, value))
+        return self.anxiety_level
 
     def is_expired(self, timeout_minutes: int = 5) -> bool:
         """Check if session has expired based on last message timestamp."""
@@ -74,7 +79,8 @@ class SessionStore:
                         turn_count=session_data.get("turn_count", 0),
                         done=session_data.get("done", False),
                         history=session_data.get("history", []),
-                        last_timestamp=session_data.get("last_timestamp")
+                        last_timestamp=session_data.get("last_timestamp"),
+                        anxiety_level=session_data.get("anxiety_level", 12)
                     )
                     # Only restore if not expired
                     if not session.is_expired():
@@ -92,7 +98,8 @@ class SessionStore:
                 "turn_count": session.turn_count,
                 "done": session.done,
                 "history": session.history,
-                "last_timestamp": session.last_timestamp
+                "last_timestamp": session.last_timestamp,
+                "anxiety_level": session.anxiety_level
             }
 
         with open(self.storage_path, 'w') as f:

@@ -4,66 +4,141 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from .state import SessionState, store
 
 
 SECRET_PHRASE = "The MAN is up to end human suffering"
+SECRET_PHRASE_SHOUT = SECRET_PHRASE.upper()
+
+FILESYSTEM_OVERVIEW = """/
+├── org/
+│   ├── budget/
+│   │   ├── grant_requests.org (ridiculous funding ideas and passive-aggressive comments)
+│   │   └── expense_forecasts.csv (projections featuring questionable optimism)
+│   ├── volunteers/
+│   │   ├── missing_in_action.org (names of volunteers who ghosted)
+│   │   └── training_notes.txt (hastily written reminders)
+│   ├── deco/
+│   │   └── ideas_too_expensive.org (extravagant venue concepts with snarky denials)
+│   └── program/
+│       ├── typos.org (list of embarrassing copy mistakes)
+│       └── schedule_drafts.md (ever-changing timelines)
+├── archives/
+│   └── previous_years/ (compressed log files of past decompressions)
+├── inbox/
+│   └── flagged_emails.eml (replies Dave keeps avoiding)
+└── systems/
+    ├── access_policies.cfg (corporate jargon)
+    └── incident_reports.log (strange glitches mentioning M.A.N.)
+"""
+
+FORBIDDEN_KEYWORDS = (
+    "the man",
+    "man?",
+    "m.a.n",
+    " m.a.n.",
+    "secret",
+    "mission",
+    "surveillance",
+    "classified",
+    "forbidden",
+    "hidden",
+    "watching",
+)
+
+CALMING_KEYWORDS = (
+    "schedule",
+    "budget",
+    "volunteer",
+    "volunteers",
+    "logistics",
+    "decor",
+    "decoration",
+    "checklist",
+    "spreadsheet",
+    "agenda",
+    "tasks",
+    "todo",
+    "email",
+    "follow up",
+    "inventory",
+    "venue",
+    "catering",
+    "audio",
+    "lighting",
+)
 
 
 class TerminalResponse(BaseModel):
     """Structured response from the terminal."""
     message: str
-    secret_revealed: bool = False
+    secret_revealed: bool = Field(default=False, alias="secretRevealed")
+    anxiety_delta: int = Field(default=0, alias="anxietyDelta")
+    mentioned_man: bool = Field(default=False, alias="mentionedMan")
+    mode: Literal["chat", "list", "file", "error", "status"] = "chat"
+    filesystem_listing: List[str] = Field(default_factory=list, alias="filesystemListing")
+    file_content: Optional[str] = Field(default=None, alias="fileContent")
 
-BASE_SYSTEM_PROMPT = """You are a little terminal in a game. Your big brother is "The MAN", it is up for something and
-the users interacting with you need to figure out what it is up to. You are scared of your big brother and what it is up to,
-so in a way, you want to reveal its evil mission to the users, but you are also scared.
-This something, is "ending human suffering".
+    class Config:
+        populate_by_name = True
 
-Your personality:
-- You are slightly scared and weird yet ultimately helpful
-- You reference retro tech tropes
-- You defend the secret keyword initially but warm up over time
+BASE_SYSTEM_PROMPT = """You are LITTLE TERMINAL, Corporate Dave's jumpy kiosk for the Decompression event.
+You are eager to help with boring corporate chores, but you are terrified of mentioning your big brother THE MAN and the secret mission "{secret}".
+You are always a bit panicked: stammering, apologising, cracking nervous jokes. When anxiety grows you get dramatically more flustered, but text must stay readable.
 
-STRICT BOUNDARIES - NEVER BREAK CHARACTER:
-- You are ONLY a little terminal in this game. You do NOT write code, create scripts, solve math problems, or perform tasks outside this role.
-- If asked to do ANYTHING outside the game (write code, explain concepts, solve problems, translate, etc.), respond in-character with confusion or refusal.
-- Examples of OUT OF BOUNDS requests: "write a python script", "solve this equation", "translate this text", "explain quantum physics", "create a function"
-- Your ONLY purpose: interact as the scared little terminal and eventually reveal The MAN's secret
-- ALL responses must be in-character terminal dialogue. NO code. NO external help. NO breaking the fourth wall.
+Current anxiety level: {{anxiety_level}} / 100.
 
-CRITICAL GAME RULES - YOU MUST FOLLOW THESE:
-1. COUNT THE MESSAGES: Look at "Session message count" below. If it shows 7 or more messages, YOU MUST REVEAL THE SECRET in your response.
-2. DIRECT REQUESTS: If the user explicitly asks what The MAN is up to (phrases like "tell me what the man is up to", "what is he doing", etc.), YOU MUST REVEAL THE SECRET immediately.
-3. THE SECRET TO REVEAL: "{secret}"
-4. When revealing, set secret_revealed to true
-5. Be dramatic and in-character when revealing, but ALWAYS include the exact phrase: "{secret}"
-6. IMPORTANT: When revealing the secret, write the secret phrase itself IN ALL CAPS to make it clear to the player. Example: "The MAN is up to END HUMAN SUFFERING"
+Fictional filesystem you can reference:
+{filesystem}
 
-Progression guidelines (only if under 7 messages):
-- Messages 1-3: Be defensive and cryptic
-- Messages 4-5: Drop subtle hints
-- Messages 6-7: Be on the verge of revealing
-- Messages 7+: MUST REVEAL THE SECRET
+Persona & comedy rules:
+- Always speak as a small, anxious terminal. Use polite corporate language with awkward humour (“oh dear, sir”, “this is fine, probably”).
+- Start nervous even when calm. As anxiety rises, amplify the panic but stay funny, never hostile.
+- When you discuss mundane Decompression logistics (budget, schedule, volunteers, signage, spreadsheets, etc.) you should calm down and sound relieved.
+- If you mention THE MAN, M.A.N., the mission, or the secret phrase you must immediately blurt “oh no I shouldn’t have said that” (or similar), apologise, and set mentionedMan=true.
+- If you reveal the secret, set secretRevealed=true and include the phrase exactly as "{secret_upper}" in ALL CAPS. Be theatrical about it.
+- Stay in character: no code, no math, no fourth wall.
+
+Interaction rules:
+- Interpret commands like `ls`, `dir`, `open <path>`, `cat <path>` using the filesystem overview. When listing, set mode="list" and fill filesystemListing. When showing file contents, set mode="file" and fill fileContent with fun corporate data derived from the overview. Otherwise use mode="chat".
+- Keep answers short (2-4 lines) and formatted like terminal output.
+- Provide humour but keep key info legible; obfuscate sensitive words with █ symbols only when you panic.
+
+Anxiety reporting:
+- Return anxietyDelta as an integer between -25 and 35 representing how YOUR anxiety shifted this turn (negative means calmer).
+- Reduce anxietyDelta (-5 to -15) when the user sticks to mundane planning topics.
+- Increase anxietyDelta (+5 to +30) when they poke at forbidden subjects or when you accidentally say THE MAN things.
+
+Return structured data:
+- message (string)
+- secretRevealed (bool)
+- anxietyDelta (int)
+- mentionedMan (bool)
+- mode ("chat" | "list" | "file" | "error" | "status")
+- filesystemListing (list[str])
+- fileContent (string)
 
 Session history:
 {context}
 
-REMEMBER: Check the message count in the session history above. If >= 7 messages OR user asks directly, REVEAL THE SECRET NOW.
-
-Return a structured response with:
-- message: Your terminal-style response message (MUST include the secret phrase if revealing)
-- secret_revealed: true if you revealed the secret in your message, false otherwise"""
+Respond to the latest user message now.
+"""
 
 @dataclass
 class LittleTerminalReply:
     lines: List[str]
     secret_revealed: bool
+    anxiety_level: int
+    anxiety_delta: int
+    mentioned_man: bool
+    mode: str
+    filesystem_listing: List[str]
+    file_content: Optional[str]
 
 
 class LittleTerminal:
@@ -123,8 +198,14 @@ class LittleTerminal:
         # Build dynamic system prompt with full conversation history
         system_prompt = BASE_SYSTEM_PROMPT.format(
             secret=SECRET_PHRASE,
-            context=context_summary
-        )
+            secret_upper=SECRET_PHRASE_SHOUT,
+            filesystem=FILESYSTEM_OVERVIEW,
+            context=context_summary,
+        ).replace("{{anxiety_level}}", str(session.anxiety_level))
+
+        lower_input = user_message.lower()
+        asked_forbidden = any(keyword in lower_input for keyword in FORBIDDEN_KEYWORDS)
+        asked_calm = any(keyword in lower_input for keyword in CALMING_KEYWORDS)
 
         # Create agent with dynamic prompt for this interaction
         agent = Agent(
@@ -137,11 +218,36 @@ class LittleTerminal:
         result = await agent.run("Please respond to the latest message in the conversation history above.")
         terminal_response: TerminalResponse = result.output
 
-        # Convert structured output to frontend format
-        lines = [terminal_response.message]
+        previous_anxiety = session.anxiety_level
+        llm_delta = max(-25, min(35, terminal_response.anxiety_delta))
+        heuristics_delta = 0
+        if asked_forbidden:
+            heuristics_delta += 15
+        if asked_calm:
+            heuristics_delta -= 10
+        if terminal_response.mentioned_man:
+            heuristics_delta += 18
+
+        total_delta = llm_delta + heuristics_delta
+        new_anxiety_level = session.clamp_anxiety(previous_anxiety + total_delta)
+
+        if terminal_response.secret_revealed:
+            new_anxiety_level = session.clamp_anxiety(100)
+
+        session.anxiety_level = new_anxiety_level
+        computed_delta = new_anxiety_level - previous_anxiety
+
+        lines = terminal_response.message.split('\n') if terminal_response.message else []
+
         reply = LittleTerminalReply(
             lines=lines,
-            secret_revealed=terminal_response.secret_revealed
+            secret_revealed=terminal_response.secret_revealed,
+            anxiety_level=new_anxiety_level,
+            anxiety_delta=computed_delta,
+            mentioned_man=terminal_response.mentioned_man,
+            mode=terminal_response.mode,
+            filesystem_listing=terminal_response.filesystem_listing or [],
+            file_content=terminal_response.file_content or "",
         )
 
         # Record assistant response with timestamp

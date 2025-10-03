@@ -18,7 +18,7 @@ install-python:
 	$(PYTHON) -m pip install -r python_service/requirements.txt
 
 start-node:
-	@echo "Starting Express server on http://localhost:3000"
+	@echo "Starting Next.js server on http://localhost:3000"
 	PYTHON_SERVICE_URL=$(PYTHON_SERVICE_URL) npm start
 
 start-python:
@@ -26,10 +26,10 @@ start-python:
 	$(UVICORN) $(PYTHON_APP) --factory --reload
 
 dev:
-	@echo "Launching FastAPI bridge and Express server"
+	@echo "Launching FastAPI bridge and Next.js dev server"
 	@trap 'kill 0' EXIT; \
 		$(UVICORN) $(PYTHON_APP) --factory --reload & \
-		PYTHON_SERVICE_URL=$(PYTHON_SERVICE_URL) npm start
+		PYTHON_SERVICE_URL=$(PYTHON_SERVICE_URL) npm run dev
 
 lint: lint-md
 

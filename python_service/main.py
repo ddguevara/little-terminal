@@ -21,6 +21,12 @@ class ChatResponse(BaseModel):
     session_id: str = Field(alias="sessionId")
     lines: List[str]
     secret_revealed: bool = Field(alias="secretRevealed")
+    anxiety_level: int = Field(alias="anxietyLevel")
+    anxiety_delta: int = Field(alias="anxietyDelta")
+    mentioned_man: bool = Field(alias="mentionedMan")
+    mode: str
+    filesystem_listing: List[str] = Field(alias="filesystemListing")
+    file_content: str = Field(alias="fileContent")
 
     class Config:
         populate_by_name = True
@@ -49,6 +55,12 @@ def build_app() -> FastAPI:
             session_id=session.id,
             lines=reply.lines,
             secret_revealed=reply.secret_revealed,
+            anxiety_level=reply.anxiety_level,
+            anxiety_delta=reply.anxiety_delta,
+            mentioned_man=reply.mentioned_man,
+            mode=reply.mode,
+            filesystem_listing=reply.filesystem_listing,
+            file_content=reply.file_content,
         )
 
     @api.get("/health")
