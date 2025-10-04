@@ -18,7 +18,7 @@ class SessionState:
     done: bool = False
     history: List[Dict[str, str]] = field(default_factory=list)
     last_timestamp: Optional[str] = None
-    anxiety_level: int = 12
+    anxiety_level: int = 18
 
     def record_turn(self, role: str, content: str) -> None:
         timestamp = datetime.now().isoformat()

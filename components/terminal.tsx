@@ -64,10 +64,6 @@ const CALM_TOPICS = [
 const CORRUPTION_CHARS = /[█▓▒░∆#]/
 const ANXIETY_META_RE = /^\s*anxiety(?:\s*delta|\s*level)?\s*:/i
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
 function detectMessageType(line: string): TerminalMessage["type"] {
   if (/error|fault|critical|panic/i.test(line)) {
     return "error"
@@ -118,10 +114,24 @@ export default function Terminal() {
   const [messages, setMessages] = useState<TerminalMessage[]>(() => [
     createMessage("terminal", "system", "DECOMPRESSION OPS TERMINAL // KRAFTWERK"),
     createMessage("terminal", "system", "subsystem audit: nervous"),
-    createMessage("terminal", "system", "prime directive buffer: fragile"),
-    createMessage("terminal", "system", "hello. i exist to assist and definitely not to mention THE MAN."),
+    createMessage(
+      "terminal",
+      "system",
+      "purpose: assist corporate dave with decompression logistics"
+    ),
+    createMessage(
+      "terminal",
+      "system",
+      "note: automation upgrade on hold (ads consumed budget)"
+    ),
+    createMessage(
+      "terminal",
+      "system",
+      "hello. i exist to assist and definitely not to mention THE MAN."
+    ),
   ])
-  const [anxietyLevel, setAnxietyLevel] = useState(18)
+  const baselineAnxiety = 18
+  const [anxietyLevel, setAnxietyLevel] = useState(baselineAnxiety)
   const [anxietyState, setAnxietyState] = useState<AnxietyState>("boot")
   const [stateChanged, setStateChanged] = useState(false)
   const [keyPressed, setKeyPressed] = useState(false)
@@ -358,8 +368,7 @@ export default function Terminal() {
       const totalChars = terminalEntries.reduce((sum, message) => sum + message.content.length, 0)
       registerPendingTerminalIds(terminalIds, totalChars)
 
-      const nextLevel = clamp(payload.anxietyLevel ?? anxietyLevel, 0, 100)
-      setAnxietyLevel(nextLevel)
+      setAnxietyLevel(baselineAnxiety)
 
       if (payload.secretRevealed) {
         setAnxietyState("secret")
@@ -368,8 +377,7 @@ export default function Terminal() {
         return
       }
 
-      const derivedState = levelToState(nextLevel)
-      setAnxietyState(derivedState)
+      setAnxietyState("steady")
       triggerStateChanged()
     } catch (error) {
       console.error("Failed to reach chat backend", error)
@@ -381,6 +389,7 @@ export default function Terminal() {
       setMessages((prev) => [...prev, errorMessage])
       registerPendingTerminalIds([errorMessage.id], errorMessage.content.length)
       setAnxietyState("error")
+      setAnxietyLevel(baselineAnxiety)
       triggerStateChanged()
       return
     } finally {

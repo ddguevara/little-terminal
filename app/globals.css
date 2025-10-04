@@ -294,15 +294,15 @@
 @keyframes warmGlow {
   0% {
     opacity: 0;
-    filter: blur(12px);
+    filter: blur(14px);
   }
-  30% {
-    opacity: 0.45;
-    filter: blur(6px);
+  20% {
+    opacity: 0.5;
+    filter: blur(8px);
   }
   100% {
     opacity: 0;
-    filter: blur(12px);
+    filter: blur(14px);
   }
 }
 
@@ -349,6 +349,43 @@
     opacity: 0;
   }
   20% {
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 1;
+  }
+}
+
+@keyframes bootLineOne {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes bootLineTwo {
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 1;
+  }
+}
+
+@keyframes bootLineThree {
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  30% {
     opacity: 1;
   }
   100% {
