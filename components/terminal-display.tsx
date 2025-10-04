@@ -3,21 +3,17 @@
 import type React from "react"
 
 import { useEffect, useRef, useState } from "react"
-import type { AnxietyState } from "./terminal"
-
-interface Message {
-  type: "system" | "user" | "error" | "warning"
-  content: string
-  corrupted?: boolean
-}
+import type { AnxietyState, TerminalMessage } from "./terminal"
 
 interface TerminalDisplayProps {
-  messages: Message[]
+  messages: TerminalMessage[]
   anxietyState: AnxietyState
   anxietyLevel: number
   isRebooting: boolean
   onSubmit: (input: string) => void
   onKeyPress?: () => void
+  disabled?: boolean
+  onTerminalLineComplete?: (id: string) => void
 }
 
 export function TerminalDisplay({
@@ -27,6 +23,8 @@ export function TerminalDisplay({
   isRebooting,
   onSubmit,
   onKeyPress,
+  disabled = false,
+  onTerminalLineComplete,
 }: TerminalDisplayProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState("")
@@ -37,10 +35,10 @@ export function TerminalDisplay({
   }, [messages])
 
   useEffect(() => {
-    if (!isRebooting) {
+    if (!isRebooting && !disabled) {
       inputRef.current?.focus()
     }
-  }, [isRebooting, messages])
+  }, [isRebooting, messages, disabled])
 
   const getStateColor = () => {
     switch (anxietyState) {
@@ -68,38 +66,32 @@ export function TerminalDisplay({
   }
 
   const getPulseSpeed = () => {
-    if (anxietyLevel < 25) return "4s"
-    if (anxietyLevel < 50) return "2s"
-    if (anxietyLevel < 75) return "1s"
-    return "0.5s"
+    if (anxietyLevel < 25) return "5.5s"
+    if (anxietyLevel < 50) return "3s"
+    if (anxietyLevel < 75) return "1.2s"
+    return "0.8s"
   }
 
   const getScanlineSpeed = () => {
-    if (anxietyLevel < 25) return "scanlineSlow 8s linear infinite"
-    if (anxietyLevel < 50) return "scanlineMedium 4s linear infinite"
-    if (anxietyLevel < 75) return "scanlineFast 1.5s linear infinite"
-    return "scanlineFrenzy 0.4s linear infinite"
+    if (anxietyLevel < 30) return "scanlineSlow 12s linear infinite"
+    if (anxietyLevel < 70) return "scanlineMedium 7s linear infinite"
+    return "scanlineFast 4.5s linear infinite"
   }
 
   const getGlitchIntensity = () => {
-    if (anxietyLevel < 25) return 0
-    if (anxietyLevel < 50) return 0.3
-    if (anxietyLevel < 75) return 0.6
-    return 1
+    if (anxietyLevel < 40) return 0
+    if (anxietyLevel < 70) return 0.08
+    if (anxietyLevel < 90) return 0.14
+    return 0.2
   }
 
   const getChromaticAberration = () => {
-    if (anxietyLevel < 25) return "none"
-    if (anxietyLevel < 50) return "chromaticAberration 0.5s infinite"
-    if (anxietyLevel < 75) return "chromaticAberration 0.3s infinite"
-    return "chromaticAberration 0.15s infinite"
+    if (anxietyLevel < 70) return "none"
+    if (anxietyLevel < 90) return "chromaticAberration 0.55s infinite"
+    return "chromaticAberration 0.35s infinite"
   }
 
-  const getScreenShake = () => {
-    if (anxietyLevel < 50) return "none"
-    if (anxietyLevel < 75) return "screenShake 0.5s infinite"
-    return "screenShake 0.2s infinite"
-  }
+  const getScreenShake = () => "none"
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -222,54 +214,29 @@ export function TerminalDisplay({
         <div className="relative z-20 mx-auto max-w-4xl">
           {/* Header */}
           <div className="mb-8 border-b pb-4" style={{ borderColor: getStateColor() }}>
-            <div className="flex items-start justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs tracking-[0.12em]">
               <div className="space-y-1">
-                <div>LT-13 HOLDINGS CO.</div>
-                <div>OPERATING SINCE: 2018</div>
-                <div>MODE: INDOCTRINATION_ACTIVE</div>
-                <div>LOCATION: HQ-NYC / NODE LA / REMOTE</div>
+                <div>DECOMPRESSION OPS TERMINAL</div>
+                <div>SUBSYSTEM: ADMIN SUPPORT</div>
               </div>
-              <div className="space-y-1 text-right">
-                <div>STATUS: ONLINE 668:346</div>
-                <div>ACCESS LEVEL: RECRUIT</div>
-                <div>AUTHORIZED USERS: VERIFIED</div>
-                <div>TIME ACCESSED: {new Date().toLocaleTimeString()}</div>
-                <div className="flex items-center justify-end gap-2">
-                  <div
-                    className="h-2 w-2 rounded-full"
-                    style={{
-                      backgroundColor: getStateColor(),
-                      boxShadow: `0 0 10px ${getStateColor()}`,
-                      animation: anxietyLevel > 50 ? "pulse 0.5s ease-in-out infinite" : "none",
-                    }}
-                  />
-                  <span>RECORDING IN PROGRESS</span>
-                </div>
+              <div className="text-right space-y-1">
+                <div>LOCATION: KRAFTWERK // ZÜRICH</div>
+                <div>BUFFER INTEGRITY: {Math.max(0, 100 - anxietyLevel)}%</div>
               </div>
             </div>
           </div>
 
           {/* Messages */}
           <div className="space-y-2">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`${message.corrupted ? "animate-pulse" : ""}`}
-                style={{
-                  animation: message.corrupted ? `textCorrupt 0.3s infinite, ${getChromaticAberration()}` : "none",
-                }}
-              >
-                <span className="opacity-50">
-                  {message.type === "user"
-                    ? "> "
-                    : message.type === "error"
-                      ? "[ERROR] "
-                      : message.type === "warning"
-                        ? "[WARN] "
-                        : "$ "}
-                </span>
-                <span>{message.content}</span>
-              </div>
+            {messages.map((message) => (
+              <TerminalLine
+                key={message.id}
+                message={message}
+                stateColor={getStateColor()}
+                chromaticAnimation={getChromaticAberration()}
+                scrollTarget={messagesEndRef}
+                onComplete={onTerminalLineComplete}
+              />
             ))}
 
             {!isRebooting && (
@@ -280,6 +247,7 @@ export function TerminalDisplay({
                   type="text"
                   value={input}
                   onChange={handleInputChange}
+                  disabled={disabled}
                   className="flex-1 bg-transparent outline-none"
                   style={{
                     color: getStateColor(),
@@ -304,16 +272,86 @@ export function TerminalDisplay({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Status bar */}
-          <div className="mt-8 border-t pt-4 text-xs opacity-50" style={{ borderColor: getStateColor() }}>
-            <div className="flex justify-between">
-              <div>SIGNAL INTEGRITY: {Math.max(0, 100 - anxietyLevel)}%</div>
-              <div>STATE: {anxietyState.toUpperCase()}</div>
-              <div>DISCLOSURE QUOTA: {(anxietyLevel * 0.7).toFixed(1)}%</div>
-            </div>
-          </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TerminalLine({
+  message,
+  stateColor,
+  chromaticAnimation,
+  scrollTarget,
+  onComplete,
+}: {
+  message: TerminalMessage
+  stateColor: string
+  chromaticAnimation: string
+  scrollTarget: React.RefObject<HTMLDivElement>
+  onComplete?: (id: string) => void
+}) {
+  const [displayedText, setDisplayedText] = useState(
+    message.author === "user" ? message.content : ""
+  )
+
+  useEffect(() => {
+    if (message.author === "user") {
+      setDisplayedText(message.content)
+      onComplete?.(message.id)
+      return
+    }
+
+    setDisplayedText("")
+    const text = message.content
+    let index = 0
+    let cancelled = false
+    let timer: number | null = null
+
+    const tick = () => {
+      if (cancelled) return
+      index += 1
+      setDisplayedText(text.slice(0, index))
+      scrollTarget.current?.scrollIntoView({ behavior: "smooth" })
+      if (index < text.length) {
+        timer = window.setTimeout(tick, 22 + Math.random() * 30)
+      } else {
+        onComplete?.(message.id)
+      }
+    }
+
+    tick()
+
+    return () => {
+      cancelled = true
+      if (timer) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [message.id, message.author, message.content, scrollTarget, onComplete])
+
+  const prefix = (() => {
+    if (message.author === "user") return "YOU>"
+    if (message.type === "error") return "[ERROR]"
+    if (message.type === "warning") return "[WARN]"
+    return "$"
+  })()
+
+  const className = message.author === "user" ? "text-[#9fffe0]" : undefined
+
+  return (
+    <div
+      className={message.corrupted ? "animate-pulse" : undefined}
+      style={{
+        animation: message.corrupted
+          ? `textCorrupt 0.3s infinite, ${chromaticAnimation}`
+          : "none",
+      }}
+    >
+      <span className="opacity-50 mr-2" style={{ color: stateColor }}>
+        {prefix}
+      </span>
+      <span className={className}>{displayedText}</span>
     </div>
   )
 }

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { TerminalDisplay } from "./terminal-display"
 import { AudioManager } from "./audio-manager"
+import { BootOverlay } from "./boot-overlay"
 
 export type AnxietyState =
   | "boot"
@@ -16,7 +17,9 @@ export type AnxietyState =
   | "error"
   | "idle"
 
-interface Message {
+export interface TerminalMessage {
+  id: string
+  author: "terminal" | "user"
   type: "system" | "user" | "error" | "warning"
   content: string
   corrupted?: boolean
@@ -34,19 +37,12 @@ interface ChatResponse {
   fileContent: string
 }
 
-const INITIAL_MESSAGES: Message[] = [
-  { type: "system", content: "CORPORATE DAVE // DECOMPRESSION OPS" },
-  { type: "system", content: "subsystem audit: nervous" },
-  { type: "system", content: "anxiety buffer: low" },
-  { type: "system", content: "hello, sir. i am ready to help (i think)." },
-]
-
 const ANXIETY_EFFECTS = [
-  { max: 25, color: "#39ff14", scan: 8, noise: 0.06, glitch: 0.04, aberration: 0, shake: 0 },
-  { max: 45, color: "#74ff9f", scan: 6, noise: 0.08, glitch: 0.1, aberration: 0.4, shake: 0.1 },
-  { max: 70, color: "#d7ff5a", scan: 4.6, noise: 0.12, glitch: 0.18, aberration: 0.8, shake: 0.25 },
-  { max: 90, color: "#ff9f43", scan: 3.2, noise: 0.16, glitch: 0.26, aberration: 1.1, shake: 0.46 },
-  { max: 101, color: "#ff4d6d", scan: 2.2, noise: 0.22, glitch: 0.34, aberration: 1.35, shake: 0.68 },
+  { max: 25, color: "#5eff95", scan: 10, noise: 0.03, glitch: 0, aberration: 0, shake: 0 },
+  { max: 45, color: "#a9ff8c", scan: 8.2, noise: 0.05, glitch: 0.03, aberration: 0.1, shake: 0.015 },
+  { max: 70, color: "#ffd45a", scan: 6.2, noise: 0.07, glitch: 0.06, aberration: 0.22, shake: 0.05 },
+  { max: 90, color: "#ff9350", scan: 5.0, noise: 0.09, glitch: 0.1, aberration: 0.4, shake: 0.11 },
+  { max: 101, color: "#ff5c7a", scan: 4.2, noise: 0.11, glitch: 0.14, aberration: 0.6, shake: 0.16 },
 ] as const
 
 const CALM_TOPICS = [
@@ -66,12 +62,13 @@ const CALM_TOPICS = [
 ]
 
 const CORRUPTION_CHARS = /[█▓▒░∆#]/
+const ANXIETY_META_RE = /^\s*anxiety(?:\s*delta|\s*level)?\s*:/i
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function detectMessageType(line: string): Message["type"] {
+function detectMessageType(line: string): TerminalMessage["type"] {
   if (/error|fault|critical|panic/i.test(line)) {
     return "error"
   }
@@ -103,12 +100,36 @@ function levelToState(level: number): AnxietyState {
 }
 
 export default function Terminal() {
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
+  const idRef = useRef(0)
+  const nextId = () => `msg-${idRef.current++}`
+  const createMessage = (
+    author: "terminal" | "user",
+    type: TerminalMessage["type"],
+    content: string,
+    options?: { corrupted?: boolean }
+  ): TerminalMessage => ({
+    id: nextId(),
+    author,
+    type,
+    content,
+    corrupted: options?.corrupted ?? false,
+  })
+
+  const [messages, setMessages] = useState<TerminalMessage[]>(() => [
+    createMessage("terminal", "system", "DECOMPRESSION OPS TERMINAL // KRAFTWERK"),
+    createMessage("terminal", "system", "subsystem audit: nervous"),
+    createMessage("terminal", "system", "prime directive buffer: fragile"),
+    createMessage("terminal", "system", "hello. i exist to assist and definitely not to mention THE MAN."),
+  ])
   const [anxietyLevel, setAnxietyLevel] = useState(18)
   const [anxietyState, setAnxietyState] = useState<AnxietyState>("boot")
   const [stateChanged, setStateChanged] = useState(false)
   const [keyPressed, setKeyPressed] = useState(false)
   const [isRebooting, setIsRebooting] = useState(false)
+  const [terminalBusy, setTerminalBusy] = useState(true)
+  const pendingTerminalMessages = useRef<Set<string>>(new Set())
+  const releaseTimeoutRef = useRef<number | null>(null)
+  const [bootOverlayVisible, setBootOverlayVisible] = useState(true)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const prevAnxietyRef = useRef(anxietyLevel)
   const rebootTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -122,6 +143,15 @@ export default function Terminal() {
       const fresh = window.crypto.randomUUID()
       window.localStorage.setItem("little-terminal-session", fresh)
       setSessionId(fresh)
+    }
+
+    const timer = window.setTimeout(() => {
+      setBootOverlayVisible(false)
+      setTerminalBusy(false)
+    }, 5000)
+
+    return () => {
+      window.clearTimeout(timer)
     }
   }, [])
 
@@ -161,17 +191,24 @@ export default function Terminal() {
     setTimeout(() => setStateChanged(false), 160)
   }
 
-  const buildCalmNote = (userText: string): Message | null => {
+  const buildCalmNote = (userText: string): TerminalMessage | null => {
     if (!CALM_TOPICS.some((topic) => userText.includes(topic))) {
       return null
     }
-    return { type: "system", content: "oh! mundane admin detected. breathing... slower..." }
+    return createMessage("terminal", "system", "oh! mundane admin detected. breathing... slower...")
   }
 
   const handleReboot = () => {
     setIsRebooting(true)
+    setTerminalBusy(true)
     setAnxietyState("critical")
-    setMessages([{ type: "system", content: "SYSTEM REBOOT INITIATED..." }])
+    pendingTerminalMessages.current.clear()
+    if (releaseTimeoutRef.current) {
+      window.clearTimeout(releaseTimeoutRef.current)
+      releaseTimeoutRef.current = null
+    }
+    setMessages([createMessage("terminal", "system", "SYSTEM REBOOT INITIATED...")])
+    setBootOverlayVisible(true)
 
     rebootTimerRef.current = setTimeout(() => {
       const freshId = window.crypto?.randomUUID?.() ?? null
@@ -179,49 +216,57 @@ export default function Terminal() {
         window.localStorage.setItem("little-terminal-session", freshId)
       }
       setSessionId(freshId)
-      setMessages(INITIAL_MESSAGES)
+      setMessages([
+        createMessage("terminal", "system", "DECOMPRESSION OPS TERMINAL // KRAFTWERK"),
+        createMessage("terminal", "system", "subsystem audit: nervous"),
+        createMessage("terminal", "system", "prime directive buffer: fragile"),
+        createMessage(
+          "terminal",
+          "system",
+          "hello. i exist to assist and definitely not to mention THE MAN."
+        ),
+      ])
       setAnxietyLevel(18)
       setAnxietyState("steady")
       setIsRebooting(false)
+      setTerminalBusy(false)
+      setBootOverlayVisible(false)
     }, 3200)
   }
 
   const parseResponse = (payload: ChatResponse, userInput: string) => {
-    const entries: Message[] = []
-
+    const entries: TerminalMessage[] = []
     payload.lines.forEach((line) => {
       if (!line) return
-      entries.push({
-        type: detectMessageType(line),
-        content: line,
-        corrupted: CORRUPTION_CHARS.test(line),
-      })
+      if (ANXIETY_META_RE.test(line)) {
+        return
+      }
+      entries.push(
+        createMessage("terminal", detectMessageType(line), line, {
+          corrupted: CORRUPTION_CHARS.test(line),
+        })
+      )
     })
 
     if (payload.mode === "list" && payload.filesystemListing.length) {
-      entries.push({ type: "system", content: "DIRECTORY VIEW:" })
+      entries.push(createMessage("terminal", "system", "DIRECTORY VIEW:"))
       payload.filesystemListing.forEach((line) => {
-        entries.push({ type: "system", content: line })
+        entries.push(createMessage("terminal", "system", line))
       })
     }
 
     if (payload.mode === "file" && payload.fileContent) {
-      entries.push({ type: "system", content: "FILE OPEN:" })
+      entries.push(createMessage("terminal", "system", "FILE OPEN:"))
       payload.fileContent.split("\n").forEach((line) => {
-        entries.push({
-          type: detectMessageType(line),
-          content: line,
-          corrupted: CORRUPTION_CHARS.test(line),
-        })
+        entries.push(
+          createMessage("terminal", detectMessageType(line), line, {
+            corrupted: CORRUPTION_CHARS.test(line),
+          })
+        )
       })
     }
 
-    if (payload.mentionedMan) {
-      entries.push({
-        type: "warning",
-        content: "oh no i absolutely should not have said that. please pretend you did not hear it.",
-      })
-    } else {
+    if (!payload.mentionedMan) {
       const calmLine = buildCalmNote(userInput)
       if (calmLine) {
         entries.push(calmLine)
@@ -231,14 +276,62 @@ export default function Terminal() {
     return entries
   }
 
+  const registerPendingTerminalIds = useCallback(
+    (ids: string[], charBudget = 0) => {
+      if (!ids.length) {
+        if (releaseTimeoutRef.current) {
+          window.clearTimeout(releaseTimeoutRef.current)
+          releaseTimeoutRef.current = null
+        }
+        if (!isRebooting) {
+          setTerminalBusy(false)
+        }
+        return
+      }
+      const store = pendingTerminalMessages.current
+      ids.forEach((id) => store.add(id))
+      setTerminalBusy(true)
+      if (releaseTimeoutRef.current) {
+        window.clearTimeout(releaseTimeoutRef.current)
+      }
+      const estimate = Math.max(1200, 50 * Math.max(1, charBudget))
+      releaseTimeoutRef.current = window.setTimeout(() => {
+        store.clear()
+        if (!isRebooting) {
+          setTerminalBusy(false)
+        }
+      }, estimate)
+    },
+    [isRebooting]
+  )
+
+  const handleTerminalLineComplete = useCallback(
+    (id: string) => {
+      const store = pendingTerminalMessages.current
+      if (!store.has(id)) {
+        return
+      }
+      store.delete(id)
+      if (store.size === 0 && !isRebooting) {
+        if (releaseTimeoutRef.current) {
+          window.clearTimeout(releaseTimeoutRef.current)
+          releaseTimeoutRef.current = null
+        }
+        setTerminalBusy(false)
+      }
+    },
+    [isRebooting]
+  )
+
   const handleSubmit = async (input: string) => {
-    if (!input.trim()) {
+    if (!input.trim() || terminalBusy) {
       return
     }
 
     const lowerInput = input.trim().toLowerCase()
 
-    setMessages((prev) => [...prev, { type: "user", content: input }])
+    setMessages((prev) => [...prev, createMessage("user", "user", input)])
+    setTerminalBusy(true)
     setAnxietyState("processing")
 
     try {
@@ -260,6 +353,10 @@ export default function Terminal() {
 
       const newMessages = parseResponse(payload, lowerInput)
       setMessages((prev) => [...prev, ...newMessages])
+      const terminalEntries = newMessages.filter((message) => message.author === "terminal")
+      const terminalIds = terminalEntries.map((message) => message.id)
+      const totalChars = terminalEntries.reduce((sum, message) => sum + message.content.length, 0)
+      registerPendingTerminalIds(terminalIds, totalChars)
 
       const nextLevel = clamp(payload.anxietyLevel ?? anxietyLevel, 0, 100)
       setAnxietyLevel(nextLevel)
@@ -276,12 +373,18 @@ export default function Terminal() {
       triggerStateChanged()
     } catch (error) {
       console.error("Failed to reach chat backend", error)
-      setMessages((prev) => [
-        ...prev,
-        { type: "error", content: "CONNECTION ERROR. PLEASE TAP AGAIN." },
-      ])
+      const errorMessage = createMessage(
+        "terminal",
+        "error",
+        "CONNECTION ERROR. PLEASE TAP AGAIN."
+      )
+      setMessages((prev) => [...prev, errorMessage])
+      registerPendingTerminalIds([errorMessage.id], errorMessage.content.length)
       setAnxietyState("error")
       triggerStateChanged()
+      return
+    } finally {
+      setKeyPressed(false)
     }
   }
 
@@ -295,6 +398,7 @@ export default function Terminal() {
         onKeyPress={keyPressed}
         onStateChange={stateChanged}
       />
+      <BootOverlay visible={bootOverlayVisible} />
       <TerminalDisplay
         messages={messages}
         anxietyState={memoisedAnxietyState}
@@ -302,6 +406,8 @@ export default function Terminal() {
         isRebooting={isRebooting}
         onSubmit={handleSubmit}
         onKeyPress={handleKeyPress}
+        disabled={terminalBusy}
+        onTerminalLineComplete={handleTerminalLineComplete}
       />
     </div>
   )

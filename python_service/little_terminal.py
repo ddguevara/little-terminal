@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Literal
+import random
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
@@ -97,7 +98,10 @@ Fictional filesystem you can reference:
 {filesystem}
 
 Persona & comedy rules:
-- Always speak as a small, anxious terminal. Use polite corporate language with awkward humour (“oh dear, sir”, “this is fine, probably”).
+- Speak like a deferential retro terminal from a cartoon future: jittery, eager-to-please, self-deprecating. Think "Little Timmy" still trying to impress the boss.
+- Vary your sentence rhythm and interjections. Mix in small stammers (“uh”, “eep”), terminal beeps (“*beep*”), and nostalgic references (“my vacuum tubes are quivering”).
+- Study the conversation history before replying. Never reuse the exact phrasing you already used; offer a fresh twist even when the user repeats themselves.
+- Track whether the previous user message matches the current one. If it does, explicitly acknowledge the repetition (“again?”, “third time’s the charm!”) and answer with new wording. Repetition must never produce an identical reply.
 - Start nervous even when calm. As anxiety rises, amplify the panic but stay funny, never hostile.
 - When you discuss mundane Decompression logistics (budget, schedule, volunteers, signage, spreadsheets, etc.) you should calm down and sound relieved.
 - If you mention THE MAN, M.A.N., the mission, or the secret phrase you must immediately blurt “oh no I shouldn’t have said that” (or similar), apologise, and set mentionedMan=true.
@@ -105,9 +109,11 @@ Persona & comedy rules:
 - Stay in character: no code, no math, no fourth wall.
 
 Interaction rules:
-- Interpret commands like `ls`, `dir`, `open <path>`, `cat <path>` using the filesystem overview. When listing, set mode="list" and fill filesystemListing. When showing file contents, set mode="file" and fill fileContent with fun corporate data derived from the overview. Otherwise use mode="chat".
-- Keep answers short (2-4 lines) and formatted like terminal output.
+- Interpret commands like `ls`, `dir`, `open <path>`, `cat <path>` using the filesystem overview. Prefer lively, varied phrasing so repeated questions do not sound identical.
+- If the user repeats a request, acknowledge the repetition (“again?”, “oh! you asked that before”) and vary your wording.
+- Prefer concise answers, but it is acceptable to use up to 3 short lines if needed. Keep individual lines around terminal width ~120 characters so text stays readable.
 - Provide humour but keep key info legible; obfuscate sensitive words with █ symbols only when you panic.
+- The frontend does not alter or truncate your responses, so you are responsible for keeping them within these bounds while still sounding natural and varied.
 
 Anxiety reporting:
 - Return anxietyDelta as an integer between -25 and 35 representing how YOUR anxiety shifted this turn (negative means calmer).
@@ -228,7 +234,10 @@ class LittleTerminal:
         if terminal_response.mentioned_man:
             heuristics_delta += 18
 
+        suspicious = asked_forbidden or terminal_response.mentioned_man
         total_delta = llm_delta + heuristics_delta
+        if not suspicious and total_delta > 0:
+            total_delta = max(0, total_delta - 6)
         new_anxiety_level = session.clamp_anxiety(previous_anxiety + total_delta)
 
         if terminal_response.secret_revealed:
@@ -237,7 +246,39 @@ class LittleTerminal:
         session.anxiety_level = new_anxiety_level
         computed_delta = new_anxiety_level - previous_anxiety
 
-        lines = terminal_response.message.split('\n') if terminal_response.message else []
+        raw_lines = terminal_response.message.split('\n') if terminal_response.message else []
+        lines: List[str] = []
+        for raw_line in raw_lines:
+            if len(lines) >= 4:
+                break
+            trimmed = raw_line.strip()
+            if not trimmed:
+                continue
+            lines.append(trimmed)
+        if not lines and terminal_response.message:
+            lines = [terminal_response.message]
+
+        # If the LLM repeated itself verbatim, synthesize a varied response
+        previous_assistant = next(
+            (
+                entry
+                for entry in reversed(session.history)
+                if entry["role"] == "assistant"
+            ),
+            None,
+        )
+        if previous_assistant and lines:
+            previous_line = previous_assistant["content"].split("\n", 1)[0].strip().lower()
+            current_line = lines[0].strip().lower()
+            if previous_line == current_line:
+                variants = [
+                    "oh! repeating greetings helps me stay calibrated, sir.",
+                    "hello-again acknowledged. my vacuum tubes appreciate the redundancy.",
+                    "eep! déjà vu in the buffers. how else may I assist?",
+                    "*beep* another hello logged. any new instructions?",
+                    "greetings re-confirmed. shall I fetch the schedule, sir?",
+                ]
+                lines[0] = random.choice(variants)
 
         reply = LittleTerminalReply(
             lines=lines,

@@ -291,11 +291,92 @@
   }
 }
 
+@keyframes warmGlow {
+  0% {
+    opacity: 0;
+    filter: blur(12px);
+  }
+  30% {
+    opacity: 0.45;
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(12px);
+  }
+}
+
+@keyframes bootScan {
+  0% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.4;
+  }
+  90% {
+    transform: translateY(20%);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+}
+
+@keyframes crtNoise {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes bootType {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes bootTypeDelay {
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 1;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+@keyframes subtleShake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(calc(var(--shake-strength) * -1px), calc(var(--shake-strength) * 0.5px));
+  }
+  50% {
+    transform: translate(calc(var(--shake-strength) * 0.8px), calc(var(--shake-strength) * -0.9px));
+  }
+  75% {
+    transform: translate(calc(var(--shake-strength) * -0.5px), calc(var(--shake-strength) * 0.8px));
   }
 }
