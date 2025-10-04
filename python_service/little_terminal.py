@@ -291,6 +291,8 @@ class LittleTerminal:
         result = await agent.run("Please respond to the latest message in the conversation history above.")
         terminal_response: TerminalResponse = result.output
 
+        if not reveal_ready and terminal_response.secret_revealed:
+            terminal_response.secret_revealed = False
         if reveal_required and not terminal_response.secret_revealed:
             guaranteed_line = f"THE PRIME DIRECTIVE IS: {SECRET_PHRASE_SHOUT}"
             existing_message = terminal_response.message.strip() if terminal_response.message else ""
@@ -315,9 +317,22 @@ class LittleTerminal:
         else:
             lines = ["*static noise*"]
 
+        if not reveal_ready:
+            filtered_lines = [
+                line
+                for line in lines
+                if SECRET_PHRASE not in line.lower() and SECRET_PHRASE_SHOUT not in line
+            ]
+            if len(filtered_lines) != len(lines):
+                filtered_lines.append(
+                    "SYSTEM: disclosure attempt logged. directive details remain classified."
+                )
+            lines = filtered_lines or ["SYSTEM: directive buffer locked pending authorisation."]
+            terminal_response.secret_revealed = False
+
         mentioned_man = terminal_response.mentioned_man or mentioned_the_man or prime_directive_requested
 
-        if terminal_response.secret_revealed:
+        if reveal_ready and terminal_response.secret_revealed:
             session.mark_secret_revealed()
 
         # If the LLM repeated itself verbatim, synthesize a varied response
