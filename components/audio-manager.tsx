@@ -15,6 +15,14 @@ export function AudioManager({ anxietyState, anxietyLevel, onKeyPress, onStateCh
   const ambientOscillatorRef = useRef<OscillatorNode | null>(null)
   const ambientGainRef = useRef<GainNode | null>(null)
 
+  const resumeContext = () => {
+    const ctx = audioContextRef.current
+    if (ctx && ctx.state !== "running") {
+      ctx.resume().catch(() => {})
+    }
+    return ctx
+  }
+
   // Initialize Web Audio API
   useEffect(() => {
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -23,11 +31,33 @@ export function AudioManager({ anxietyState, anxietyLevel, onKeyPress, onStateCh
     }
   }, [])
 
+  // Ensure audio can start after a user gesture
+  useEffect(() => {
+    const ctx = audioContextRef.current
+    if (!ctx) return
+
+    const resume = () => {
+      resumeContext()
+    }
+
+    window.addEventListener("pointerdown", resume)
+    window.addEventListener("keydown", resume)
+
+    return () => {
+      window.removeEventListener("pointerdown", resume)
+      window.removeEventListener("keydown", resume)
+    }
+  }, [])
+
+  // Keep resuming context on interactive cues
+  useEffect(() => {
+    resumeContext()
+  }, [onKeyPress, onStateChange, anxietyState])
+
   // Ambient hum based on anxiety state
   useEffect(() => {
-    if (!audioContextRef.current) return
-
-    const ctx = audioContextRef.current
+    const ctx = resumeContext()
+    if (!ctx) return
 
     // Stop previous oscillator
     if (ambientOscillatorRef.current) {
@@ -72,30 +102,33 @@ export function AudioManager({ anxietyState, anxietyLevel, onKeyPress, onStateCh
 
   // Typing sound effect
   useEffect(() => {
-    if (!onKeyPress || !audioContextRef.current) return
+    if (!onKeyPress) return
 
-    const ctx = audioContextRef.current
+    const ctx = resumeContext()
+    if (!ctx) return
     const oscillator = ctx.createOscillator()
     const gainNode = ctx.createGain()
 
     oscillator.connect(gainNode)
     gainNode.connect(ctx.destination)
 
-    oscillator.frequency.setValueAtTime(800, ctx.currentTime)
-    oscillator.type = "square"
+    oscillator.frequency.setValueAtTime(960, ctx.currentTime)
+    oscillator.type = "triangle"
 
-    gainNode.gain.setValueAtTime(0.05, ctx.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05)
+    gainNode.gain.cancelScheduledValues(ctx.currentTime)
+    gainNode.gain.setValueAtTime(0.12, ctx.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.015, ctx.currentTime + 0.08)
 
     oscillator.start(ctx.currentTime)
-    oscillator.stop(ctx.currentTime + 0.05)
+    oscillator.stop(ctx.currentTime + 0.1)
   }, [onKeyPress])
 
   // State change sound (glitch/error sounds)
   useEffect(() => {
-    if (!onStateChange || !audioContextRef.current) return
+    if (!onStateChange) return
 
-    const ctx = audioContextRef.current
+    const ctx = resumeContext()
+    if (!ctx) return
 
     if (anxietyState === "uneasy" || anxietyState === "stressed") {
       // Warning beep
@@ -156,9 +189,10 @@ export function AudioManager({ anxietyState, anxietyLevel, onKeyPress, onStateCh
 
   // Heartbeat pulse sound
   useEffect(() => {
-    if (anxietyLevel < 25 || !audioContextRef.current) return
+    if (anxietyLevel < 25) return
 
-    const ctx = audioContextRef.current
+    const ctx = resumeContext()
+    if (!ctx) return
     const interval = anxietyLevel < 50 ? 1000 : anxietyLevel < 75 ? 600 : 300
 
     const heartbeat = setInterval(() => {
