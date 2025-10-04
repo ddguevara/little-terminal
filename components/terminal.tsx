@@ -23,6 +23,7 @@ export interface TerminalMessage {
   type: "system" | "user" | "error" | "warning"
   content: string
   corrupted?: boolean
+  highlightPrime?: boolean
 }
 
 interface ChatResponse {
@@ -97,19 +98,22 @@ function levelToState(level: number): AnxietyState {
 
 export default function Terminal() {
   const idRef = useRef(0)
-  const nextId = () => `msg-${idRef.current++}`
-  const createMessage = (
-    author: "terminal" | "user",
-    type: TerminalMessage["type"],
-    content: string,
-    options?: { corrupted?: boolean }
-  ): TerminalMessage => ({
-    id: nextId(),
-    author,
-    type,
-    content,
-    corrupted: options?.corrupted ?? false,
-  })
+  const createMessage = useCallback(
+    (
+      author: "terminal" | "user",
+      type: TerminalMessage["type"],
+      content: string,
+      options?: { corrupted?: boolean; highlightPrime?: boolean }
+    ): TerminalMessage => ({
+      id: `msg-${idRef.current++}`,
+      author,
+      type,
+      content,
+      corrupted: options?.corrupted ?? false,
+      highlightPrime: options?.highlightPrime ?? false,
+    }),
+    []
+  )
 
   const [messages, setMessages] = useState<TerminalMessage[]>(() => [
     createMessage("terminal", "system", "DECOMPRESSION OPS TERMINAL // KRAFTWERK"),
@@ -143,6 +147,8 @@ export default function Terminal() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const prevAnxietyRef = useRef(anxietyLevel)
   const rebootTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const postRevealTimerRef = useRef<number | null>(null)
+  const secretSequenceActiveRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -181,6 +187,9 @@ export default function Terminal() {
       if (rebootTimerRef.current) {
         clearTimeout(rebootTimerRef.current)
       }
+      if (postRevealTimerRef.current) {
+        window.clearTimeout(postRevealTimerRef.current)
+      }
     }
   }, [])
 
@@ -201,7 +210,12 @@ export default function Terminal() {
     return createMessage("terminal", "system", "oh! mundane admin detected. breathing... slower...")
   }
 
-  const handleReboot = () => {
+  const handleReboot = useCallback(() => {
+    if (postRevealTimerRef.current) {
+      window.clearTimeout(postRevealTimerRef.current)
+      postRevealTimerRef.current = null
+    }
+    secretSequenceActiveRef.current = false
     setIsRebooting(true)
     setTerminalBusy(true)
     setAnxietyState("critical")
@@ -235,10 +249,12 @@ export default function Terminal() {
       setTerminalBusy(false)
       setBootOverlayVisible(false)
     }, 3200)
-  }
+  }, [createMessage])
 
   const parseResponse = (payload: ChatResponse, userInput: string) => {
     const entries: TerminalMessage[] = []
+    const secretRegex = /reduce human suffering/i
+    const secretReveal = payload.secretRevealed
     payload.lines.forEach((line) => {
       if (!line) return
       if (ANXIETY_META_RE.test(line)) {
@@ -247,6 +263,7 @@ export default function Terminal() {
       entries.push(
         createMessage("terminal", detectMessageType(line), line, {
           corrupted: CORRUPTION_CHARS.test(line),
+          highlightPrime: secretReveal && secretRegex.test(line),
         })
       )
     })
@@ -286,7 +303,7 @@ export default function Terminal() {
           window.clearTimeout(releaseTimeoutRef.current)
           releaseTimeoutRef.current = null
         }
-        if (!isRebooting) {
+        if (!isRebooting && !secretSequenceActiveRef.current) {
           setTerminalBusy(false)
         }
         return
@@ -294,6 +311,13 @@ export default function Terminal() {
       const store = pendingTerminalMessages.current
       ids.forEach((id) => store.add(id))
       setTerminalBusy(true)
+      if (secretSequenceActiveRef.current) {
+        if (releaseTimeoutRef.current) {
+          window.clearTimeout(releaseTimeoutRef.current)
+          releaseTimeoutRef.current = null
+        }
+        return
+      }
       if (releaseTimeoutRef.current) {
         window.clearTimeout(releaseTimeoutRef.current)
       }
@@ -320,11 +344,21 @@ export default function Terminal() {
           window.clearTimeout(releaseTimeoutRef.current)
           releaseTimeoutRef.current = null
         }
+        if (secretSequenceActiveRef.current) {
+          if (postRevealTimerRef.current) {
+            window.clearTimeout(postRevealTimerRef.current)
+          }
+          postRevealTimerRef.current = window.setTimeout(() => {
+            postRevealTimerRef.current = null
+            handleReboot()
+          }, 15000)
+          return
+        }
         setTerminalBusy(false)
         setBootOverlayVisible(false)
       }
     },
-    [isRebooting]
+    [isRebooting, handleReboot]
   )
 
   const handleSubmit = async (input: string) => {
@@ -367,7 +401,34 @@ export default function Terminal() {
       if (payload.secretRevealed) {
         setAnxietyState("secret")
         triggerStateChanged()
-        handleReboot()
+        const panicLine = createMessage(
+          "terminal",
+          "warning",
+          "no... what have i done? i better reboot myself to forget."
+        )
+        const countdownLines = [
+          createMessage("terminal", "system", "REBOOTING IN 3…"),
+          createMessage("terminal", "system", "REBOOTING IN 2…"),
+          createMessage("terminal", "system", "REBOOTING IN 1…"),
+        ]
+
+        setMessages((prev) => [...prev, panicLine, ...countdownLines])
+
+        const scriptedMessages = [panicLine, ...countdownLines]
+        const scriptedIds = scriptedMessages.map((message) => message.id)
+        const scriptCharBudget = scriptedMessages.reduce(
+          (sum, message) => sum + message.content.length,
+          0
+        )
+
+        secretSequenceActiveRef.current = true
+
+        registerPendingTerminalIds(scriptedIds, scriptCharBudget)
+
+        if (postRevealTimerRef.current) {
+          window.clearTimeout(postRevealTimerRef.current)
+          postRevealTimerRef.current = null
+        }
         return
       }
 

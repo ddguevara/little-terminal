@@ -106,6 +106,8 @@ export function TerminalDisplay({
     onKeyPress?.()
   }
 
+  const secretMode = anxietyState === "secret"
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-black">
       {/* CRT Bezel - outer frame */}
@@ -227,7 +229,7 @@ export function TerminalDisplay({
           </div>
 
           {/* Messages */}
-          <div className="space-y-2">
+          <div className={`space-y-2 transition-opacity duration-700 ${secretMode ? "" : ""}`}>
             {messages.map((message) => (
               <TerminalLine
                 key={message.id}
@@ -236,6 +238,7 @@ export function TerminalDisplay({
                 chromaticAnimation={getChromaticAberration()}
                 scrollTarget={messagesEndRef}
                 onComplete={onTerminalLineComplete}
+                secretMode={secretMode}
               />
             ))}
 
@@ -284,12 +287,14 @@ function TerminalLine({
   chromaticAnimation,
   scrollTarget,
   onComplete,
+  secretMode,
 }: {
   message: TerminalMessage
   stateColor: string
   chromaticAnimation: string
   scrollTarget: React.RefObject<HTMLDivElement>
   onComplete?: (id: string) => void
+  secretMode: boolean
 }) {
   const [displayedText, setDisplayedText] = useState(
     message.author === "user" ? message.content : ""
@@ -337,7 +342,21 @@ function TerminalLine({
     return "$"
   })()
 
-  const className = message.author === "user" ? "text-[#9fffe0]" : undefined
+  const lowerContent = message.content.toLowerCase()
+
+  const shouldDim =
+    secretMode &&
+    message.author === "terminal" &&
+    !message.highlightPrime &&
+    message.type === "system" &&
+    !lowerContent.startsWith("rebooting in")
+
+  const baseClassNames = [
+    message.author === "user" ? "text-[#9fffe0]" : "",
+    message.highlightPrime ? "text-[#e7ffd3] tracking-[0.24em] uppercase text-base sm:text-lg" : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
 
   return (
     <div
@@ -345,13 +364,21 @@ function TerminalLine({
       style={{
         animation: message.corrupted
           ? `textCorrupt 0.3s infinite, ${chromaticAnimation}`
-          : "none",
+          : secretMode
+            ? chromaticAnimation
+            : "none",
+        opacity: shouldDim ? 0.15 : 1,
+        filter: shouldDim ? "blur(1px)" : "none",
+        transition: "opacity 0.6s ease, filter 0.6s ease",
+        textShadow: message.highlightPrime
+          ? "0 0 18px rgba(200, 255, 190, 0.9)"
+          : undefined,
       }}
     >
       <span className="opacity-50 mr-2" style={{ color: stateColor }}>
         {prefix}
       </span>
-      <span className={className}>{displayedText}</span>
+      <span className={baseClassNames}>{displayedText}</span>
     </div>
   )
 }

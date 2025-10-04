@@ -19,6 +19,8 @@ class SessionState:
     history: List[Dict[str, str]] = field(default_factory=list)
     last_timestamp: Optional[str] = None
     anxiety_level: int = 18
+    man_mention_count: int = 0
+    secret_revealed: bool = False
 
     def record_turn(self, role: str, content: str) -> None:
         timestamp = datetime.now().isoformat()
@@ -30,6 +32,14 @@ class SessionState:
     def clamp_anxiety(self, value: int) -> int:
         self.anxiety_level = max(0, min(100, value))
         return self.anxiety_level
+
+    def register_man_mention(self) -> None:
+        """Increment how many times the user has invoked THE MAN."""
+        self.man_mention_count += 1
+
+    def mark_secret_revealed(self) -> None:
+        """Persist that the prime directive has already been leaked."""
+        self.secret_revealed = True
 
     def is_expired(self, timeout_minutes: int = 5) -> bool:
         """Check if session has expired based on last message timestamp."""
@@ -80,7 +90,9 @@ class SessionStore:
                         done=session_data.get("done", False),
                         history=session_data.get("history", []),
                         last_timestamp=session_data.get("last_timestamp"),
-                        anxiety_level=session_data.get("anxiety_level", 12)
+                        anxiety_level=session_data.get("anxiety_level", 12),
+                        man_mention_count=session_data.get("man_mention_count", 0),
+                        secret_revealed=session_data.get("secret_revealed", False),
                     )
                     # Only restore if not expired
                     if not session.is_expired():
@@ -99,7 +111,9 @@ class SessionStore:
                 "done": session.done,
                 "history": session.history,
                 "last_timestamp": session.last_timestamp,
-                "anxiety_level": session.anxiety_level
+                "anxiety_level": session.anxiety_level,
+                "man_mention_count": session.man_mention_count,
+                "secret_revealed": session.secret_revealed,
             }
 
         with open(self.storage_path, 'w') as f:
