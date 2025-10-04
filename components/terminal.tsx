@@ -255,18 +255,38 @@ export default function Terminal() {
     const entries: TerminalMessage[] = []
     const secretRegex = /reduce human suffering/i
     const secretReveal = payload.secretRevealed
+    let hasHighlightedPrime = false
+    let hasCanonicalPrime = false
     payload.lines.forEach((line) => {
       if (!line) return
       if (ANXIETY_META_RE.test(line)) {
         return
       }
+      const highlightPrime = secretReveal && secretRegex.test(line)
+      if (highlightPrime) {
+        hasHighlightedPrime = true
+        if (line.trim().toUpperCase() === "THE PRIME DIRECTIVE IS: REDUCE HUMAN SUFFERING") {
+          hasCanonicalPrime = true
+        }
+      }
       entries.push(
         createMessage("terminal", detectMessageType(line), line, {
           corrupted: CORRUPTION_CHARS.test(line),
-          highlightPrime: secretReveal && secretRegex.test(line),
+          highlightPrime,
         })
       )
     })
+
+    if (secretReveal && (!hasHighlightedPrime || !hasCanonicalPrime)) {
+      entries.push(
+        createMessage(
+          "terminal",
+          "system",
+          "THE PRIME DIRECTIVE IS: REDUCE HUMAN SUFFERING",
+          { highlightPrime: true }
+        )
+      )
+    }
 
     if (payload.mode === "list" && payload.filesystemListing.length) {
       entries.push(createMessage("terminal", "system", "DIRECTORY VIEW:"))
@@ -407,9 +427,8 @@ export default function Terminal() {
           "no... what have i done? i better reboot myself to forget."
         )
         const countdownLines = [
-          createMessage("terminal", "system", "REBOOTING IN 3…"),
-          createMessage("terminal", "system", "REBOOTING IN 2…"),
-          createMessage("terminal", "system", "REBOOTING IN 1…"),
+          createMessage("terminal", "system", "REBOOTING IN 15 SECONDS…"),
+          createMessage("terminal", "system", "STANDBY FOR MEMORY SCRUB…"),
         ]
 
         setMessages((prev) => [...prev, panicLine, ...countdownLines])
