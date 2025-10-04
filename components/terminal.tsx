@@ -155,14 +155,7 @@ export default function Terminal() {
       setSessionId(fresh)
     }
 
-    const timer = window.setTimeout(() => {
-      setBootOverlayVisible(false)
-      setTerminalBusy(false)
-    }, 5000)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
+    setTerminalBusy(true)
   }, [])
 
   useEffect(() => {
@@ -328,6 +321,7 @@ export default function Terminal() {
           releaseTimeoutRef.current = null
         }
         setTerminalBusy(false)
+        setBootOverlayVisible(false)
       }
     },
     [isRebooting]
@@ -407,7 +401,15 @@ export default function Terminal() {
         onKeyPress={keyPressed}
         onStateChange={stateChanged}
       />
-      <BootOverlay visible={bootOverlayVisible} />
+      <BootOverlay
+        visible={bootOverlayVisible}
+        onDismiss={() => {
+          setBootOverlayVisible(false)
+          setTerminalBusy(false)
+          setAnxietyState("steady")
+          setAnxietyLevel(baselineAnxiety)
+        }}
+      />
       <TerminalDisplay
         messages={messages}
         anxietyState={memoisedAnxietyState}
